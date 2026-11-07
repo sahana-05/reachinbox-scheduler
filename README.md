@@ -1,75 +1,112 @@
 # ReachInbox Email Scheduler
 
-A full-stack email scheduling system built to handle delayed execution, strict rate limiting, and concurrent processing without relying on traditional cron jobs.
+A full-stack email scheduling system built to handle delayed execution, sender rate limits, and concurrent processing without a cron service.
 
-## 🏗 Architecture & Implementation Details
+## Architecture
 
-I built this adhering strictly to the assignment constraints. Here is how the core systems work under the hood:
+- **Scheduling without cron:** Email delivery uses BullMQ delayed jobs stored in Redis. The API calculates each job's delay from its scheduled time.
+- **Concurrency and rate limiting:** Worker concurrency is configurable and defaults to `5`. A Redis Lua script atomically enforces per-sender hourly limits and minimum spacing between sends. Jobs that reach the hourly limit are delayed into ordered slots in the next hour; they are not dropped.
+- **Restart recovery:** Redis uses AOF persistence. At startup, `reconcileOnStartup` reads scheduled and processing jobs from PostgreSQL, resets interrupted processing jobs, and re-enqueues jobs that are missing from BullMQ.
+- **Integrations:** Google OAuth2 authenticates users. On first login, the backend provisions two Ethereal sender accounts when available; users can add more senders. Slack OAuth and incoming webhooks can send rate-limit alerts. Email jobs are indexed in Elasticsearch, with PostgreSQL search as a fallback.
 
-- **Scheduling Without Cron:** I entirely avoided `node-cron` and `agenda`. Instead, the system relies strictly on BullMQ's native delayed jobs. When an email is scheduled, the backend calculates the delay in milliseconds from `Date.now()` and passes it to Redis. 
-- **Concurrency & Rate Limiting:** The worker concurrency is configurable (defaulting to 5). Thread-safety across workers is handled via atomic PostgreSQL updates and a custom Redis Lua script token bucket (`rate:{senderId}`). If a rate limit is hit, the job calculates its exact FIFO slot in the next hour and calls `job.moveToDelayed()`, preserving the send order without failing the job.
-- **Restart Persistence:** Redis runs with AOF (Append Only File) persistence enabled. Additionally, the backend runs a reconciliation script (`reconcileOnStartup`) when it boots up. It cross-references the DB for any `SCHEDULED` emails missing from Redis and re-queues them, ensuring zero data loss if the server or Redis container crashes.
-- **Integrations:** 
-  * Ethereal SMTP accounts are dynamically provisioned for each user upon signup to accurately test multi-sender environments.
-  * Real Google OAuth2 handles frontend authentication.
-  * Slack API webhooks are integrated to fire real-time alerts when hourly limits are reached.
-  * Elasticsearch 8 indexes all emails for fast frontend querying.
+## Local development
 
-## Local Development Setup
+### 1. Configure the backend
 
-### 1. Environment Variables
-Create a `.env` file in the `backend/` directory:
+Create `backend/.env` with these values. Replace the OAuth credentials and `JWT_SECRET` with your own values. The Google and Slack credentials are needed only when you use those integrations.
+
 ```env
 PORT=4000
-DATABASE_URL="postgresql://postgres:postgres@localhost:5433/reachinbox?schema=public"
-REDIS_HOST="localhost"
-REDIS_PORT=6379
-ELASTICSEARCH_NODE="http://localhost:9200"
+FRONTEND_URL=http://localhost:3000
+JWT_SECRET=replace-with-a-long-random-secret
+JWT_EXPIRES_IN=7d
+
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/reachinbox?schema=public
+REDIS_URL=redis://localhost:6379
+ELASTICSEARCH_URL=http://localhost:9200
 
 WORKER_CONCURRENCY=5
+MIN_DELAY_SECONDS=2
 MAX_EMAILS_PER_HOUR_PER_SENDER=50
 
-# OAuth & Webhook Keys
-GOOGLE_CLIENT_ID="your_google_client_id"
-GOOGLE_CLIENT_SECRET="your_google_client_secret"
-SLACK_CLIENT_ID="your_slack_client_id"
-SLACK_CLIENT_SECRET="your_slack_client_secret"
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GOOGLE_CALLBACK_URL=http://localhost:4000/api/auth/google/callback
 
-### 2. Start Infrastructure (Docker)
-Ensure Docker is running, then spin up PostgreSQL, Redis, and Elasticsearch from the root directory:
+SLACK_CLIENT_ID=your_slack_client_id
+SLACK_CLIENT_SECRET=your_slack_client_secret
+SLACK_REDIRECT_URI=http://localhost:4000/api/slack/callback
+
+ETHEREAL_FALLBACK_USER=
+ETHEREAL_FALLBACK_PASS=
+```
+
+The PostgreSQL port is `5432`, matching `docker-compose.yml`. The backend reads `REDIS_URL` and `ELASTICSEARCH_URL` (not separate Redis host/port variables).
+
+### 2. Start infrastructure
+
+From the repository root, start PostgreSQL, Redis, and Elasticsearch:
+
 ```bash
 docker compose up -d
+```
 
-### 3. Start the Backend (Port 4000)
+### 3. Initialize and start the backend
+
+In a terminal from the repository root:
+
 ```bash
 cd backend
 npm install
+npx prisma generate
 npx prisma db push
 npm run dev
-Note: The BullMQ visual dashboard runs at http://localhost:4000/admin/queues.
+```
 
-### 4. Start the Frontend (Port 3000)
-Open a new terminal tab:
+The API runs at [http://localhost:4000](http://localhost:4000). The Bull Board queue monitor is at [http://localhost:4000/admin/queues](http://localhost:4000/admin/queues).
+
+### 4. Start the frontend
+
+Open another terminal from the repository root:
+
 ```bash
 cd frontend
 npm install
 npm run dev
+```
 
-## 📋 Feature Breakdown
+The Next.js app runs at [http://localhost:3000](http://localhost:3000) and uses `http://localhost:4000` as its API by default. To change that address, set `NEXT_PUBLIC_API_URL` in `frontend/.env.local`.
 
-**Backend**
-- [x] BullMQ delayed job scheduling
-- [x] Startup DB reconciliation for crash persistence
-- [x] Redis Lua script rate limiting & `moveToDelayed` logic
-- [x] Elasticsearch indexing
-- [x] Slack webhook alerts
+### OAuth callback URLs
 
-**Frontend (Next.js App Router)**
-- [x] Google OAuth login
-- [x] Dashboard mapping exactly to Figma specs
-- [x] Client-side CSV parser (Papaparse)
-- [x] Live queue polling (Scheduled vs. Sent tabs)
+Configure these exact callback URLs in the Google and Slack developer consoles:
 
-## ⚠️ Trade-offs & Notes
-* **Ethereal Accounts:** Instead of hardcoding one generic SMTP account for the whole app, I implemented a system that generates a unique Ethereal account per sender. This allows reviewers to accurately test rate limits across multiple concurrent users.
-* **Slack Webhooks:** Slack requires HTTP callback URIs to be `localhost` for local testing. Moving to production would require updating these to HTTPS endpoints.
+- Google: `http://localhost:4000/api/auth/google/callback`
+- Slack: `http://localhost:4000/api/slack/callback`
+
+## Features
+
+### Backend
+
+- BullMQ delayed delivery without cron
+- PostgreSQL persistence and startup job reconciliation
+- Atomic Redis Lua rate limiting and delayed FIFO overflow slots
+- Elasticsearch indexing and PostgreSQL search fallback
+- Google OAuth2 and email/password authentication
+- Ethereal SMTP sender provisioning
+- Slack OAuth, incoming webhook tests, and rate-limit alerts
+- Email listing, search, detail, and star endpoints
+
+### Frontend
+
+- Next.js App Router login and dashboard
+- Scheduled and sent email views with live polling
+- Debounced email search
+- CSV recipient import with Papa Parse
+- Rich-text email composition, attachments, and send-time selection
+- Sender selection and per-campaign rate-limit settings
+
+## Notes
+
+- If Ethereal account creation is unavailable, the backend creates fallback sender records. Set `ETHEREAL_FALLBACK_USER` and `ETHEREAL_FALLBACK_PASS` if you have fallback SMTP credentials.
+- Slack and Google OAuth require valid developer app credentials and matching local callback URLs. Production deployments need HTTPS callback URLs.
