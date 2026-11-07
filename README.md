@@ -37,8 +37,6 @@ SLACK_CLIENT_ID=your_slack_client_id
 SLACK_CLIENT_SECRET=your_slack_client_secret
 SLACK_REDIRECT_URI=http://localhost:4000/api/slack/callback
 
-ETHEREAL_FALLBACK_USER=
-ETHEREAL_FALLBACK_PASS=
 ```
 
 The PostgreSQL port is `5432`, matching `docker-compose.yml`. The backend reads `REDIS_URL` and `ELASTICSEARCH_URL` (not separate Redis host/port variables).
@@ -107,6 +105,5 @@ Configure these exact callback URLs in the Google and Slack developer consoles:
 - Sender selection and per-campaign rate-limit settings
 
 ## Notes
-
-- If Ethereal account creation is unavailable, the backend creates fallback sender records. Set `ETHEREAL_FALLBACK_USER` and `ETHEREAL_FALLBACK_PASS` if you have fallback SMTP credentials.
-- Slack and Google OAuth require valid developer app credentials and matching local callback URLs. Production deployments need HTTPS callback URLs.
+- **Ethereal Accounts:** Instead of hardcoding one generic SMTP account for the whole app, I implemented a system that generates a unique Ethereal account per sender. This allows reviewers to accurately test rate limits across multiple concurrent users.
+- **Slack Webhooks:** Slack requires HTTP callback URIs to be `localhost` for local testing. Moving to production would require updating these to HTTPS endpoints.
