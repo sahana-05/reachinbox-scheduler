@@ -35,49 +35,41 @@ GOOGLE_CLIENT_SECRET="your_google_client_secret"
 SLACK_CLIENT_ID="your_slack_client_id"
 SLACK_CLIENT_SECRET="your_slack_client_secret"
 
-2. Start Infrastructure (Docker)
+### 2. Start Infrastructure (Docker)
 Ensure Docker is running, then spin up PostgreSQL, Redis, and Elasticsearch from the root directory:
+```bash
 docker compose up -d
 
-3. Start the Backend (Port 4000)
+### 3. Start the Backend (Port 4000)
+```bash
 cd backend
 npm install
 npx prisma db push
 npm run dev
 Note: The BullMQ visual dashboard runs at http://localhost:4000/admin/queues.
 
-4. Start the Frontend (Port 3000)
+### 4. Start the Frontend (Port 3000)
 Open a new terminal tab:
+```bash
 cd frontend
 npm install
 npm run dev
 
-Access the application at http://localhost:3000.
+## 📋 Feature Breakdown
 
-📋 Feature Breakdown
-Backend
+**Backend**
+- [x] BullMQ delayed job scheduling
+- [x] Startup DB reconciliation for crash persistence
+- [x] Redis Lua script rate limiting & `moveToDelayed` logic
+- [x] Elasticsearch indexing
+- [x] Slack webhook alerts
 
-[x] BullMQ delayed job scheduling
+**Frontend (Next.js App Router)**
+- [x] Google OAuth login
+- [x] Dashboard mapping exactly to Figma specs
+- [x] Client-side CSV parser (Papaparse)
+- [x] Live queue polling (Scheduled vs. Sent tabs)
 
-[x] Startup DB reconciliation for crash persistence
-
-[x] Redis Lua script rate limiting & moveToDelayed logic
-
-[x] Elasticsearch indexing
-
-[x] Slack webhook alerts
-
-Frontend (Next.js App Router)
-
-[x] Google OAuth login
-
-[x] Dashboard mapping exactly to Figma specs
-
-[x] Client-side CSV parser (Papaparse)
-
-[x] Live queue polling (Scheduled vs. Sent tabs)
-
-⚠️ Trade-offs & Notes
-Ethereal Accounts: Instead of hardcoding one generic SMTP account for the whole app, I implemented a system that generates a unique Ethereal account per sender. This allows reviewers to accurately test rate limits across multiple concurrent users.
-
-Slack Webhooks: Slack requires HTTP callback URIs to be localhost for local testing. Moving to production would require updating these to HTTPS endpoints.
+## ⚠️ Trade-offs & Notes
+* **Ethereal Accounts:** Instead of hardcoding one generic SMTP account for the whole app, I implemented a system that generates a unique Ethereal account per sender. This allows reviewers to accurately test rate limits across multiple concurrent users.
+* **Slack Webhooks:** Slack requires HTTP callback URIs to be `localhost` for local testing. Moving to production would require updating these to HTTPS endpoints.
