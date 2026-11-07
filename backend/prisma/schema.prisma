@@ -1,0 +1,96 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EmailJobStatus {
+  SCHEDULED
+  PROCESSING
+  SENT
+  FAILED
+}
+
+model User {
+  id                String     @id @default(uuid()) @db.Uuid
+  email             String     @unique
+  name              String
+  avatarUrl         String?
+  googleId          String?    @unique
+  passwordHash      String?
+  slackAccessToken  String?
+  slackWebhookUrl   String?
+  slackChannel      String?
+  slackTeamName     String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  senders           Sender[]
+  campaigns         Campaign[]
+  emailJobs         EmailJob[]
+}
+
+model Sender {
+  id        String     @id @default(uuid()) @db.Uuid
+  userId    String     @db.Uuid
+  name      String
+  email     String
+  smtpHost  String
+  smtpPort  Int
+  smtpUser  String
+  smtpPass  String
+  createdAt DateTime   @default(now())
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaigns Campaign[]
+  emailJobs EmailJob[]
+
+  @@unique([userId, email])
+  @@index([userId])
+}
+
+model Campaign {
+  id              String     @id @default(uuid()) @db.Uuid
+  userId          String     @db.Uuid
+  senderId        String     @db.Uuid
+  subject         String
+  body            String     @db.Text
+  startTime       DateTime
+  delaySeconds    Int
+  hourlyLimit     Int
+  attachmentsJson String?
+  createdAt       DateTime   @default(now())
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sender          Sender     @relation(fields: [senderId], references: [id], onDelete: Restrict)
+  emailJobs       EmailJob[]
+
+  @@index([userId, createdAt])
+}
+
+model EmailJob {
+  id                 String        @id @default(uuid()) @db.Uuid
+  campaignId         String        @db.Uuid
+  userId             String        @db.Uuid
+  senderId           String        @db.Uuid
+  senderEmail        String
+  recipientEmail     String
+  subject            String
+  body               String        @db.Text
+  attachmentsJson    String?
+  status             EmailJobStatus @default(SCHEDULED)
+  scheduledAt        DateTime
+  sentAt             DateTime?
+  etherealPreviewUrl String?
+  errorMessage       String?       @db.Text
+  idempotencyKey     String        @unique
+  isStarred          Boolean       @default(false)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  campaign           Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sender             Sender       @relation(fields: [senderId], references: [id], onDelete: Restrict)
+
+  @@index([userId, status, scheduledAt])
+  @@index([senderId, status])
+}
