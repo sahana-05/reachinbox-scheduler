@@ -112,7 +112,7 @@ export function LoginForm() {
     <main className="flex min-h-screen items-center justify-center bg-white px-5">
       <section className="w-full max-w-[460px] rounded-[10px] border border-[#e3e7eb] px-[52px] pb-[46px] pt-[48px] max-sm:px-7">
         <h1 className="mb-[25px] text-center text-[36px] font-semibold leading-[44px] tracking-[-1px] text-[#202124]">Login</h1>
-        <a href="http://localhost:4000/api/auth/google" className="flex h-[45px] w-full items-center justify-center gap-[10px] rounded-[11px] bg-[#E8F5E9] text-[14px] text-[#202124] transition hover:bg-[#dff0e3]">
+        <a href="/api/auth/google" className="flex h-[45px] w-full items-center justify-center gap-[10px] rounded-[11px] bg-[#E8F5E9] text-[14px] text-[#202124] transition hover:bg-[#dff0e3]">
           <span aria-hidden="true" className="google-mark">G</span>
           <span>Login with Google</span>
         </a>
